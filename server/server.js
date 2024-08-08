@@ -10,7 +10,7 @@ const PORT = process.env.PORT || 4000;
 const server = http.createServer(app);
 
 // Initialize Socket.IO
-const io = socketIo(server); 
+const io = socketIo(server);
 
 // Serve static files from the 'public' directory
 app.use(express.static(path.join(__dirname, '../src')));
@@ -19,11 +19,75 @@ app.use(express.static(path.join(__dirname, '../src')));
 
 io.on('connection', (socket) => {
     console.log('Client connected');
-  
+
     // // Access the transport method used
     // const transportMethod = socket.request.headers['sec-websocket-version'] ? 'WebSocket' : 'Other';
     // console.log(`Client connected using ${transportMethod}`);
 
+    client.on('keydown', handleKeydown);
+    client.on('newGame', handleNewGame);
+    client.on('joinGame', handleJoinGame);
+
+    function handleJoinGame(roomName) {
+        const room = io.sockets.adapter.rooms[roomName];
+
+        let allUsers;
+        if (room) {
+            allUsers = room.sockets;
+        }
+
+        let numClients = 0;
+        if (allUsers) {
+            numClients = Object.keys(allUsers).length;
+        }
+
+        if (numClients === 0) {
+            client.emit('unknownCode');
+            return;
+        } else if (numClients > 1) {
+            client.emit('tooManyPlayers');
+            return;
+        }
+
+        clientRooms[client.id] = roomName;
+
+        client.join(roomName);
+        client.number = 2;
+        client.emit('init', 2);
+
+        startGameInterval(roomName);
+    }
+
+    function handleNewGame() {
+        let roomName = makeid(5);
+        clientRooms[client.id] = roomName;
+        client.emit('gameCode', roomName);
+
+        state[roomName] = initGame();
+
+        client.join(roomName);
+        client.number = 1;
+        client.emit('init', 1);
+    }
+
+    function handleKeydown(keyCode) {
+        const roomName = clientRooms[client.id];
+        if (!roomName) {
+            return;
+        }
+        try {
+            keyCode = parseInt(keyCode);
+        } catch (e) {
+            console.error(e);
+            return;
+        }
+
+        const vel = getUpdatedVelocity(keyCode);
+
+        if (vel) {
+            state[roomName].players[client.number - 1].vel = vel;
+        }
+    }
 
 });
 
