@@ -3,6 +3,15 @@ const path = require('path');
 const http = require('http');
 const socketIo = require('socket.io');  // Import Socket.IO
 
+
+const { initGame, gameLoop, getUpdatedVelocity } = require('./game');
+const { FRAME_RATE } = require('./constants');
+const { makeid } = require('./utils');
+
+const state = {};
+const clientRooms = {};
+
+
 const app = express();
 const PORT = process.env.PORT || 4000;
 
