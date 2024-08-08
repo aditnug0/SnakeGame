@@ -91,6 +91,32 @@ io.on('connection', (socket) => {
 
 });
 
+
+function startGameInterval(roomName) {
+    const intervalId = setInterval(() => {
+        const winner = gameLoop(state[roomName]);
+
+        if (!winner) {
+            emitGameState(roomName, state[roomName])
+        } else {
+            emitGameOver(roomName, winner);
+            state[roomName] = null;
+            clearInterval(intervalId);
+        }
+    }, 1000 / FRAME_RATE);
+}
+
+function emitGameState(room, gameState) {
+    // Send this event to everyone in the room.
+    io.sockets.in(room)
+        .emit('gameState', JSON.stringify(gameState));
+}
+
+function emitGameOver(room, winner) {
+    io.sockets.in(room)
+        .emit('gameOver', JSON.stringify({ winner }));
+}
+
 // Serve the HTML file
 app.get("/", (req, res) => {
     res.sendFile(path.join(__dirname, '../src/index.html'));
