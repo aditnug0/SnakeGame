@@ -16,7 +16,7 @@ const clientRooms = {};
 const server = http.createServer(app);
 
 // Initialize Socket.IO
-const io = socketIo(server);
+const io = socketIo(server); 
 
 // Serve static files from the 'public' directory
 app.use(express.static(path.join(__dirname, '../src')));
@@ -25,11 +25,6 @@ app.use(express.static(path.join(__dirname, '../src')));
 io.on('connection', (client) => {
     console.log('Client connected');
   
-    // // Access the transport method used
-    // const transportMethod = socket.request.headers['sec-websocket-version'] ? 'WebSocket' : 'Other';
-    // console.log(`Client connected using ${transportMethod}`);
-
-
     client.on('keydown', handleKeydown);
     client.on('newGame', handleNewGame);
     client.on('joinGame', handleJoinGame);
@@ -49,17 +44,7 @@ io.on('connection', (client) => {
     function handleJoinGame(roomName) {
         const room = io.sockets.adapter.rooms.get(roomName);
 
-        let allUsers;
-        if (room) {
-            allUsers = room.sockets;
-        }
-
-        let numClients = 0;
-        if (allUsers) {
-            numClients = Object.keys(allUsers).length;
-        }
-
-        if (numClients === 0) {
+        if (!room) {
             client.emit('unknownCode');
             return;
         }
