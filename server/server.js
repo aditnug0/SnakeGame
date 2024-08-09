@@ -11,33 +11,37 @@ const { makeid } = require('./utils');
 
 const state = {};
 const clientRooms = {};
+const playerStatuses = {}; // Baru: Lacak status pemain
 
-// Create an HTTP server
+// Buat server HTTP
 const server = http.createServer(app);
 
-// Initialize Socket.IO
-const io = socketIo(server); 
+// Inisialisasi Socket.IO
+const io = socketIo(server);
 
-// Serve static files from the 'public' directory
+// Sajikan file statis dari direktori 'public'
 app.use(express.static(path.join(__dirname, '../src')));
 
-// Define socket events
 io.on('connection', (client) => {
-    console.log('Client connected');
-  
+    console.log('Klien terhubung');
+
     client.on('keydown', handleKeydown);
     client.on('newGame', handleNewGame);
     client.on('joinGame', handleJoinGame);
 
     client.on('disconnect', () => {
-        console.log('Client disconnected');
-        // Clean up client-related data
+        console.log('Klien terputus');
         const roomName = clientRooms[client.id];
         if (roomName) {
-            // Remove the client from the room and cleanup if necessary
             client.leave(roomName);
             delete clientRooms[client.id];
-            // Additional cleanup logic if needed
+            const room = io.sockets.adapter.rooms.get(roomName);
+
+            // Tangani kasus ketika semua pemain meninggalkan ruangan
+            if (room && room.size === 0) {
+                delete state[roomName];
+                delete playerStatuses[roomName]; // Bersihkan status pemain
+            }
         }
     });
 
@@ -57,7 +61,6 @@ io.on('connection', (client) => {
         }
 
         clientRooms[client.id] = roomName;
-
         client.join(roomName);
         client.number = numClients + 1;
         client.emit('init', client.number);
@@ -73,11 +76,12 @@ io.on('connection', (client) => {
         client.emit('gameCode', roomName);
 
         state[roomName] = initGame();
+        playerStatuses[roomName] = [true, true]; // Baru: Kedua pemain aktif pada awalnya
 
         client.join(roomName);
         client.number = 1;
         client.emit('init', 1);
-        console.log(`New game created: ${roomName}`);
+        console.log(`Permainan baru dibuat: ${roomName}`);
     }
 
     function handleKeydown(keyCode) {
@@ -89,9 +93,9 @@ io.on('connection', (client) => {
         let parsedKeyCode;
         try {
             parsedKeyCode = parseInt(keyCode);
-            if (isNaN(parsedKeyCode)) throw new Error('Invalid key code');
+            if (isNaN(parsedKeyCode)) throw new Error('Kode kunci tidak valid');
         } catch (e) {
-            console.error('Error parsing key code:', e);
+            console.error('Kesalahan saat memparsing kode kunci:', e);
             return;
         }
 
@@ -107,20 +111,29 @@ io.on('connection', (client) => {
 
 function startGameInterval(roomName) {
     const intervalId = setInterval(() => {
+        if (!state[roomName]) return; // Periksa apakah status permainan masih ada
+
         try {
-            const winner = gameLoop(state[roomName]);
+            const result = gameLoop(state[roomName]);
+            const { winner, loser } = result;
 
             if (!winner) {
                 emitGameState(roomName, state[roomName]);
             } else {
-                emitGameOver(roomName, winner);
-                state[roomName] = null;
-                clearInterval(intervalId);
+                emitGameState(roomName, state[roomName]);
+                emitGameOver(roomName, winner, loser);
+
+                // Opsional: mulai ulang permainan setelah penundaan singkat jika masih ada pemain
+                // setTimeout(() => {
+                //     if (playerStatuses[roomName].includes(true)) { // Periksa apakah ada pemain yang masih aktif
+                //         state[roomName] = initGame(); // Inisialisasi ulang status permainan
+                //         io.to(roomName).emit('gameState', JSON.stringify(state[roomName]));
+                //     }
+                // }, 5000); // Sesuaikan penundaan sesuai kebutuhan
             }
         } catch (error) {
-            console.error('Error during game loop:', error);
+            console.error('Kesalahan selama game loop:', error);
             clearInterval(intervalId);
-            // Optionally, notify clients of the error
         }
     }, 1000 / FRAME_RATE);
 }
@@ -129,16 +142,17 @@ function emitGameState(room, gameState) {
     io.to(room).emit('gameState', JSON.stringify(gameState));
 }
 
-function emitGameOver(room, winner) {
-    io.to(room).emit('gameOver', JSON.stringify({ winner }));
+function emitGameOver(room, winner, loser) {
+    io.to(room).emit('gameOver', JSON.stringify({ winner, loser }));
+    playerStatuses[room] = playerStatuses[room].map((status, index) => index + 1 === loser ? false : status); // Perbarui status pemain
 }
 
-// Serve the HTML file
+// Sajikan file HTML
 app.get("/", (req, res) => {
     res.sendFile(path.join(__dirname, '../src/index.html'));
 });
 
-// Start the server
+// Mulai server
 server.listen(PORT, () => {
-    console.log(`Server listening on port ${PORT}`);
+    console.log(`Server mendengarkan di port ${PORT}`);
 });

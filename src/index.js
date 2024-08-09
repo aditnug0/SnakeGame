@@ -21,7 +21,6 @@ const gameCodeDisplay = document.getElementById('gameCodeDisplay');
 newGameBtn.addEventListener('click', newGame);
 joinGameBtn.addEventListener('click', joinGame);
 
-
 function newGame() {
     socket.emit('newGame');
     init();
@@ -54,7 +53,9 @@ function init() {
 }
 
 function keydown(e) {
-    socket.emit('keydown', e.keyCode);
+    if (gameActive) {
+        socket.emit('keydown', e.keyCode);
+    }
 }
 
 function paintGame(state) {
@@ -94,17 +95,12 @@ function handleGameState(gameState) {
 }
 
 function handleGameOver(data) {
-    if (!gameActive) {
-        return;
-    }
-    data = JSON.parse(data);
+    const { winner, loser } = JSON.parse(data);
 
-    gameActive = false;
-
-    if (data.winner === playerNumber) {
-        alert('You Win!');
-    } else {
-        alert('You Lose :(');
+    if (loser === playerNumber) {
+        alert("Kamu Kalah!");
+        reset();
+        // Redirect to the main menu
     }
 }
 
@@ -114,12 +110,12 @@ function handleGameCode(gameCode) {
 
 function handleUnknownCode() {
     reset();
-    alert('Unknown Game Code')
+    alert('Kode Permainan Tidak Dikenal');
 }
 
 function handleTooManyPlayers() {
     reset();
-    alert('This game is already in progress');
+    alert('Permainan ini sudah dimulai');
 }
 
 function reset() {
