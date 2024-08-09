@@ -17,7 +17,7 @@ const PORT = process.env.PORT || 4000;
 const server = http.createServer(app);
 
 // Initialize Socket.IO
-const io = socketIo(server); 
+const io = socketIo(server);
 
 // Serve static files from the 'public' directory
 app.use(express.static(path.join(__dirname, '../src')));
@@ -25,7 +25,7 @@ app.use(express.static(path.join(__dirname, '../src')));
 // Define socket events
 io.on('connection', (client) => {
     console.log('Client connected');
-  
+
     // // Access the transport method used
     // const transportMethod = socket.request.headers['sec-websocket-version'] ? 'WebSocket' : 'Other';
     // console.log(`Client connected using ${transportMethod}`);
@@ -48,7 +48,7 @@ io.on('connection', (client) => {
             numClients = Object.keys(allUsers).length;
         }
 
-        if (numClients === 0) {
+        if (numClients < 0) {
             client.emit('unknownCode');
             return;
         } else if (numClients > 1) {
