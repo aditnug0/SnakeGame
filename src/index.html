@@ -3,9 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdn.tailwindcss.com"></script>
   <title>Snake Game</title>
   <style>
-    canvas { background: #000; display: block; margin: 0 auto; }
+    canvas { background: #000; display: block;}
+    .leader{
+      display: block;
+    }
   </style>
 </head>
 <body>
@@ -14,8 +18,13 @@
     <input type="text" id="usernameInput" placeholder="Enter username">
     <button onclick="startGame()">Start Game</button>
   </div>
-  <canvas id="canvas" width="800" height="800" style="display:none;"></canvas>
-  <div id="leaderboard"></div>
+
+  <div class=" flex justify-evenly">
+    <canvas class=" mt-8 mb-8" id="canvas" width="800" height="800" style="display:none;"></canvas>
+    <div id="leaderboard" class="leader mr-8 mt-8 mb-8 " style="display:none;"> HELLO WORD</div>
+  </div>
+
+  
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="/index.js"></script>

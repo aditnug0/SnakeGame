@@ -18,8 +18,7 @@ const socket = io();
     });
 
     socket.on('leaderboard', ({ scores, usernames }) => {
-      const leaderboard = document.getElementById('leaderboard');
-      leaderboard.innerHTML = '<h2>Leaderboard</h2>';
+      const leaderboard = document.getElementById('leaderboard')
       scores.forEach((score, index) => {
         leaderboard.innerHTML += `<p>${usernames[index] || 'Player ' + (index + 1)}: ${score}</p>`;
       });
@@ -57,6 +56,7 @@ const socket = io();
 
       document.getElementById('main').style.display = 'none';
       canvas.style.display = 'block';
+      document.getElementById('leaderboard').style.display = 'block'
       gameActive = true;
     }
 
