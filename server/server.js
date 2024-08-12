@@ -6,153 +6,98 @@ const app = express();
 const PORT = process.env.PORT || 4000;
 
 const { initGame, gameLoop, getUpdatedVelocity } = require('./game');
-const { FRAME_RATE } = require('./constants');
-const { makeid } = require('./utils');
+const { FRAME_RATE, GRID_SIZE } = require('./constants');
 
 const state = {};
 const clientRooms = {};
-const playerStatuses = {}; // Baru: Lacak status pemain
+const usernames = {};
 
-// Buat server HTTP
+const GLOBAL_ROOM_NAME = 'global';
+
+// Create HTTP server
 const server = http.createServer(app);
 
-// Inisialisasi Socket.IO
+// Initialize Socket.IO
 const io = socketIo(server);
 
-// Sajikan file statis dari direktori 'public'
-app.use(express.static(path.join(__dirname, '../src')));
+// Serve static files
+app.use(express.static(path.join(__dirname, 'public')));
 
 io.on('connection', (client) => {
-    console.log('Klien terhubung');
+    console.log('Client connected');
 
+    client.on('setUsername', handleSetUsername);
     client.on('keydown', handleKeydown);
-    client.on('newGame', handleNewGame);
-    client.on('joinGame', handleJoinGame);
+    client.on('startGame', handleStartGame);
 
     client.on('disconnect', () => {
-        console.log('Klien terputus');
+        console.log('Client disconnected');
         const roomName = clientRooms[client.id];
         if (roomName) {
             client.leave(roomName);
             delete clientRooms[client.id];
+            delete usernames[client.id];
             const room = io.sockets.adapter.rooms.get(roomName);
 
-            // Tangani kasus ketika semua pemain meninggalkan ruangan
             if (room && room.size === 0) {
                 delete state[roomName];
-                delete playerStatuses[roomName]; // Bersihkan status pemain
             }
         }
     });
 
-    function handleJoinGame(roomName) {
-        const room = io.sockets.adapter.rooms.get(roomName);
-
-        if (!room) {
-            client.emit('unknownCode');
-            return;
-        }
-
-        const numClients = room.size;
-
-        if (numClients >= 2) {
-            client.emit('tooManyPlayers');
-            return;
-        }
-
-        clientRooms[client.id] = roomName;
-        client.join(roomName);
-        client.number = numClients + 1;
-        client.emit('init', client.number);
-
-        if (numClients === 1) {
-            startGameInterval(roomName);
-        }
+    function handleSetUsername(username) {
+        usernames[client.id] = username;
+        client.emit('usernameSet', username);
     }
 
-    function handleNewGame() {
-        const roomName = makeid(5);
-        clientRooms[client.id] = roomName;
-        client.emit('gameCode', roomName);
+    function handleStartGame() {
+        clientRooms[client.id] = GLOBAL_ROOM_NAME;
+        client.join(GLOBAL_ROOM_NAME);
+        client.number = (io.sockets.adapter.rooms.get(GLOBAL_ROOM_NAME) || []).size;
 
-        state[roomName] = initGame();
-        playerStatuses[roomName] = [true, true]; // Baru: Kedua pemain aktif pada awalnya
+        client.emit('init', client.number);
 
-        client.join(roomName);
-        client.number = 1;
-        client.emit('init', 1);
-        console.log(`Permainan baru dibuat: ${roomName}`);
+        if (!state[GLOBAL_ROOM_NAME]) {
+            state[GLOBAL_ROOM_NAME] = initGame(GRID_SIZE, 4); // Initialize with 8 players
+        }
+
+        if (client.number === 1) {
+            startGameInterval(GLOBAL_ROOM_NAME);
+        }
     }
 
     function handleKeydown(keyCode) {
         const roomName = clientRooms[client.id];
-        if (!roomName) {
-            return;
-        }
+        if (!roomName) return;
 
-        let parsedKeyCode;
-        try {
-            parsedKeyCode = parseInt(keyCode);
-            if (isNaN(parsedKeyCode)) throw new Error('Kode kunci tidak valid');
-        } catch (e) {
-            console.error('Kesalahan saat memparsing kode kunci:', e);
-            return;
-        }
-
-        const vel = getUpdatedVelocity(parsedKeyCode);
+        const vel = getUpdatedVelocity(keyCode);
         if (vel) {
-            const player = state[roomName].players[client.number - 1];
-            if (player) {
-                player.vel = vel;
-            }
+            state[roomName].players[client.number - 1].vel = vel;
         }
     }
 });
 
 function startGameInterval(roomName) {
     const intervalId = setInterval(() => {
-        if (!state[roomName]) return; // Periksa apakah status permainan masih ada
+        const winner = gameLoop(state[roomName]);
 
-        try {
-            const result = gameLoop(state[roomName]);
-            const { winner, loser } = result;
-
-            if (!winner) {
-                emitGameState(roomName, state[roomName]);
-            } else {
-                emitGameState(roomName, state[roomName]);
-                emitGameOver(roomName, winner, loser);
-
-                // Opsional: mulai ulang permainan setelah penundaan singkat jika masih ada pemain
-                // setTimeout(() => {
-                //     if (playerStatuses[roomName].includes(true)) { // Periksa apakah ada pemain yang masih aktif
-                //         state[roomName] = initGame(); // Inisialisasi ulang status permainan
-                //         io.to(roomName).emit('gameState', JSON.stringify(state[roomName]));
-                //     }
-                // }, 5000); // Sesuaikan penundaan sesuai kebutuhan
-            }
-        } catch (error) {
-            console.error('Kesalahan selama game loop:', error);
+        if (winner) {
+            io.to(roomName).emit('leaderboard', {
+                scores: state[roomName].scores,
+                usernames: usernames
+            });
+            io.to(roomName).emit('gameOver', winner);
             clearInterval(intervalId);
+        } else {
+            io.to(roomName).emit('gameState', JSON.stringify(state[roomName]));
         }
     }, 1000 / FRAME_RATE);
 }
 
-function emitGameState(room, gameState) {
-    io.to(room).emit('gameState', JSON.stringify(gameState));
-}
-
-function emitGameOver(room, winner, loser) {
-    io.to(room).emit('gameOver', JSON.stringify({ winner, loser }));
-    playerStatuses[room] = playerStatuses[room].map((status, index) => index + 1 === loser ? false : status); // Perbarui status pemain
-}
-
-// Sajikan file HTML
 app.get("/", (req, res) => {
     res.sendFile(path.join(__dirname, '../src/index.html'));
 });
 
-// Mulai server
 server.listen(PORT, () => {
-    console.log(`Server mendengarkan di port ${PORT}`);
+    console.log(`Server running on port ${PORT}`);
 });

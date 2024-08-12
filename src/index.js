@@ -1,126 +1,87 @@
-const BG_COLOUR = '#231f20';
-const SNAKE_COLOUR = '#c2c2c2';
-const FOOD_COLOUR = '#e66916';
-
 const socket = io();
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const usernameInput = document.getElementById('username');
+const startButton = document.getElementById('startButton');
+const leaderboard = document.getElementById('leaderboard');
 
-socket.on('init', handleInit);
-socket.on('gameState', handleGameState);
-socket.on('gameOver', handleGameOver);
-socket.on('gameCode', handleGameCode);
-socket.on('unknownCode', handleUnknownCode);
-socket.on('tooManyPlayers', handleTooManyPlayers);
-
-const gameScreen = document.getElementById('gameScreen');
-const initialScreen = document.getElementById('initialScreen');
-const newGameBtn = document.getElementById('newGameButton');
-const joinGameBtn = document.getElementById('joinGameButton');
-const gameCodeInput = document.getElementById('gameCodeInput');
-const gameCodeDisplay = document.getElementById('gameCodeDisplay');
-
-newGameBtn.addEventListener('click', newGame);
-joinGameBtn.addEventListener('click', joinGame);
-
-function newGame() {
-    socket.emit('newGame');
-    init();
-}
-
-function joinGame() {
-    const code = gameCodeInput.value;
-    socket.emit('joinGame', code);
-    init();
-}
-
-let canvas, ctx;
 let playerNumber;
 let gameActive = false;
+let gameState = {};
 
-function init() {
-    initialScreen.style.display = "none";
-    gameScreen.style.display = "block";
+// Set up the canvas
+canvas.width = 800;
+canvas.height = 600;
 
-    canvas = document.getElementById('canvas');
-    ctx = canvas.getContext('2d');
+// Handle username submission
+startButton.addEventListener('click', () => {
+    const username = usernameInput.value.trim();
+    if (username) {
+        socket.emit('setUsername', username);
+        startGame();
+    } else {
+        alert('Please enter a username.');
+    }
+});
 
-    canvas.width = canvas.height = 600;
-
-    ctx.fillStyle = BG_COLOUR;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    document.addEventListener('keydown', keydown);
+function startGame() {
+    socket.emit('startGame');
     gameActive = true;
+    document.getElementById('startScreen').style.display = 'none';
+    document.getElementById('gameScreen').style.display = 'block';
 }
 
-function keydown(e) {
-    if (gameActive) {
-        socket.emit('keydown', e.keyCode);
-    }
-}
-
-function paintGame(state) {
-    ctx.fillStyle = BG_COLOUR;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    const food = state.food;
-    const gridsize = state.gridsize;
-    const size = canvas.width / gridsize;
-
-    ctx.fillStyle = FOOD_COLOUR;
-    ctx.fillRect(food.x * size, food.y * size, size, size);
-
-    paintPlayer(state.players[0], size, SNAKE_COLOUR);
-    paintPlayer(state.players[1], size, 'red');
-}
-
-function paintPlayer(playerState, size, colour) {
-    const snake = playerState.snake;
-
-    ctx.fillStyle = colour;
-    for (let cell of snake) {
-        ctx.fillRect(cell.x * size, cell.y * size, size, size);
-    }
-}
-
-function handleInit(number) {
+// Listen for initialization
+socket.on('init', (number) => {
     playerNumber = number;
-}
+});
 
-function handleGameState(gameState) {
-    if (!gameActive) {
-        return;
+// Listen for game state updates
+socket.on('gameState', (state) => {
+    gameState = JSON.parse(state);
+    if (gameActive) {
+        drawGame(gameState);
     }
-    gameState = JSON.parse(gameState);
-    requestAnimationFrame(() => paintGame(gameState));
-}
+});
 
-function handleGameOver(data) {
-    const { winner, loser } = JSON.parse(data);
+// Listen for leaderboard updates
+socket.on('leaderboard', (data) => {
+    updateLeaderboard(data.scores, data.usernames);
+});
 
-    if (loser === playerNumber) {
-        alert("Kamu Kalah!");
-        reset();
-        // Redirect to the main menu
+document.addEventListener('keydown', (event) => {
+    const keyCode = event.keyCode;
+    socket.emit('keydown', keyCode);
+});
+
+function drawGame(state) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const { players, food } = state;
+
+    // Ensure food is an array
+    if (Array.isArray(food)) {
+        // Draw food
+        food.forEach(piece => {
+            ctx.fillStyle = 'red';
+            ctx.fillRect(piece.x, piece.y, 10, 10);
+        });
+    } else {
+        console.error('Food is not an array:', food);
     }
+
+    // Draw players
+    players.forEach((player, index) => {
+        ctx.fillStyle = index + 1 === playerNumber ? 'blue' : 'green';
+        ctx.fillRect(player.pos.x, player.pos.y, 10, 10);
+    });
 }
 
-function handleGameCode(gameCode) {
-    gameCodeDisplay.innerText = gameCode;
-}
 
-function handleUnknownCode() {
-    reset();
-    alert('Kode Permainan Tidak Dikenal');
-}
-
-function handleTooManyPlayers() {
-    reset();
-    alert('Permainan ini sudah dimulai');
-}
-
-function reset() {
-    playerNumber = null;
-    gameCodeInput.value = '';
-    initialScreen.style.display = "block";
-    gameScreen.style.display = "none";
+function updateLeaderboard(scores, usernames) {
+    leaderboard.innerHTML = '';
+    scores.forEach((score, index) => {
+        const li = document.createElement('li');
+        li.textContent = `${usernames[index]}: ${score} points`;
+        leaderboard.appendChild(li);
+    });
 }
