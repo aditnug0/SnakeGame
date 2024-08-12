@@ -1,87 +1,65 @@
 const socket = io();
-const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d');
-const usernameInput = document.getElementById('username');
-const startButton = document.getElementById('startButton');
-const leaderboard = document.getElementById('leaderboard');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    let playerNumber;
+    let gameActive = false;
 
-let playerNumber;
-let gameActive = false;
-let gameState = {};
+    socket.on('init', number => {
+      playerNumber = number;
+    });
 
-// Set up the canvas
-canvas.width = 800;
-canvas.height = 600;
+    socket.on('gameState', gameState => {
+      if (!gameActive) return;
+      gameState = JSON.parse(gameState);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-// Handle username submission
-startButton.addEventListener('click', () => {
-    const username = usernameInput.value.trim();
-    if (username) {
-        socket.emit('setUsername', username);
-        startGame();
-    } else {
-        alert('Please enter a username.');
-    }
-});
+      drawFood(gameState.food);
+      drawPlayers(gameState.players);
+    });
 
-function startGame() {
-    socket.emit('startGame');
-    gameActive = true;
-    document.getElementById('startScreen').style.display = 'none';
-    document.getElementById('gameScreen').style.display = 'block';
-}
+    socket.on('leaderboard', ({ scores, usernames }) => {
+      const leaderboard = document.getElementById('leaderboard');
+      leaderboard.innerHTML = '<h2>Leaderboard</h2>';
+      scores.forEach((score, index) => {
+        leaderboard.innerHTML += `<p>${usernames[index] || 'Player ' + (index + 1)}: ${score}</p>`;
+      });
+    });
 
-// Listen for initialization
-socket.on('init', (number) => {
-    playerNumber = number;
-});
+    socket.on('gameOver', () => {
+      gameActive = false;
+      alert('Game over! Returning to main page...');
+      document.getElementById('main').style.display = 'block';
+      canvas.style.display = 'none';
+    });
 
-// Listen for game state updates
-socket.on('gameState', (state) => {
-    gameState = JSON.parse(state);
-    if (gameActive) {
-        drawGame(gameState);
-    }
-});
-
-// Listen for leaderboard updates
-socket.on('leaderboard', (data) => {
-    updateLeaderboard(data.scores, data.usernames);
-});
-
-document.addEventListener('keydown', (event) => {
-    const keyCode = event.keyCode;
-    socket.emit('keydown', keyCode);
-});
-
-function drawGame(state) {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const { players, food } = state;
-
-    // Ensure food is an array
-    if (Array.isArray(food)) {
-        // Draw food
-        food.forEach(piece => {
-            ctx.fillStyle = 'red';
-            ctx.fillRect(piece.x, piece.y, 10, 10);
-        });
-    } else {
-        console.error('Food is not an array:', food);
+    function drawFood(food) {
+      food.forEach(piece => {
+        ctx.fillStyle = 'red';
+        ctx.fillRect(piece.x * 20, piece.y * 20, 20, 20);
+      });
     }
 
-    // Draw players
-    players.forEach((player, index) => {
+    function drawPlayers(players) {
+      players.forEach((player, index) => {
         ctx.fillStyle = index + 1 === playerNumber ? 'blue' : 'green';
-        ctx.fillRect(player.pos.x, player.pos.y, 10, 10);
-    });
-}
+        player.snake.forEach(cell => {
+          ctx.fillRect(cell.x * 20, cell.y * 20, 20, 20);
+        });
+      });
+    }
 
+    function startGame() {
+      const username = document.getElementById('usernameInput').value;
+      if (!username) return alert('Please enter a username');
 
-function updateLeaderboard(scores, usernames) {
-    leaderboard.innerHTML = '';
-    scores.forEach((score, index) => {
-        const li = document.createElement('li');
-        li.textContent = `${usernames[index]}: ${score} points`;
-        leaderboard.appendChild(li);
+      socket.emit('setUsername', username);
+      socket.emit('startGame');
+
+      document.getElementById('main').style.display = 'none';
+      canvas.style.display = 'block';
+      gameActive = true;
+    }
+
+    document.addEventListener('keydown', event => {
+      socket.emit('keydown', event.keyCode);
     });
-}

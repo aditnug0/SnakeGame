@@ -1,0 +1,6 @@
+Bug :
+1. tampilkan leaderboard 
+2. jika semua pemain mati server auto restart page utama
+3. jika pemain mati lansung balik loby no stack in canvas dan bangkai auto clear 
+4. jika player click button start tolong displaykan snake player tersebut saja 
+5. make fitur waiting player biar lebih terstruktur
